@@ -28,6 +28,7 @@ def extract_bboxes(mask):
 
     Returns: bbox array [num_instances, (y1, x1, y2, x2)].
     """
+
     boxes = np.zeros([mask.shape[-1], 4], dtype=np.int32)
     for i in range(mask.shape[-1]):
         m = mask[:, :, i]
@@ -44,9 +45,25 @@ def extract_bboxes(mask):
             # No mask for this instance. Might happen due to
             # resizing or cropping. Set bbox to zeros
             x1, x2, y1, y2 = 0, 0, 0, 0
-        boxes[i] = np.array([y1, x1, y2, x2])
-    return boxes.astype(np.int32)
 
+        # from PIL import Image, ImageDraw
+        # import matplotlib.pyplot as plt
+        # im = Image.fromarray(mask[:, :, i]).convert('RGB')
+        # dr = ImageDraw.Draw(im)
+
+        # max_size = max(y2-y1, x2-x1)
+        # yc = (y2+y1)/2.0
+        # xc = (x2+x1)/2.0
+        gap = 2
+        # n_y1, n_x1 = max(yc-(max_size/2.0)-gap, 0), max(xc-(max_size/2.0)-gap, 0)
+        # n_y2, n_x2 = min(yc+(max_size/2.0)+gap, mask.shape[0]-1), min(xc+(max_size/2.0)+gap, mask.shape[0]-1)
+        boxes[i] = np.array([y1-gap, x1-gap, y2+gap, x2+gap])
+
+        # dr.rectangle(((x1-gap, y1-gap), (x2+gap, y2+gap)), outline="blue")
+        # plt.imshow(im)
+        # plt.show()
+        
+    return boxes.astype(np.int32)
 
 def compute_iou(box, boxes, box_area, boxes_area):
     """Calculates IoU of the given box with the array of the given boxes.
@@ -152,11 +169,12 @@ class Dataset(object):
             "name": class_name,
         })
 
-    def add_image(self, source, image_id, path, **kwargs):
+    def add_image(self, source, flip, image_id, path, **kwargs):
         image_info = {
             "id": image_id,
             "source": source,
             "path": path,
+            "flip": flip
         }
         image_info.update(kwargs)
         self.image_info.append(image_info)

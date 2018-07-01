@@ -45,12 +45,12 @@ class Config(object):
     # Validation stats are also calculated at each epoch end and they
     # might take a while, so don't set this too small to avoid spending
     # a lot of time on validation stats.
-    STEPS_PER_EPOCH = 1000
+    STEPS_PER_EPOCH = 500
 
     # Number of validation steps to run at the end of every training epoch.
     # A bigger number improves accuracy of validation stats, but slows
     # down the training.
-    VALIDATION_STEPS = 50
+    VALIDATION_STEPS = 1
 
     # The strides of each layer of the FPN Pyramid. These values
     # are based on a Resnet101 backbone.
@@ -60,11 +60,11 @@ class Config(object):
     NUM_CLASSES = 1  # Override in sub-classes
 
     # Length of square anchor side in pixels
-    RPN_ANCHOR_SCALES = (32, 64, 128, 256, 512)
+    RPN_ANCHOR_SCALES = (16, 32, 64, 128, 256)
 
     # Ratios of anchors at each cell (width/height)
     # A value of 1 represents a square anchor, and 0.5 is a wide anchor
-    RPN_ANCHOR_RATIOS = [0.5, 1, 2]
+    RPN_ANCHOR_RATIOS = [0.25, 0.5, 1, 2, 4, 8]
 
     # Anchor stride
     # If 1 then anchors are created for each cell in the backbone feature map.
@@ -91,8 +91,8 @@ class Config(object):
     # Images are resized such that the smallest side is >= IMAGE_MIN_DIM and
     # the longest side is <= IMAGE_MAX_DIM. In case both conditions can't
     # be satisfied together the IMAGE_MAX_DIM is enforced.
-    IMAGE_MIN_DIM = 800
-    IMAGE_MAX_DIM = 1024
+    IMAGE_MIN_DIM = 256
+    IMAGE_MAX_DIM = 256
     # If True, pad images with zeros such that they're (max_dim by max_dim)
     IMAGE_PADDING = True  # currently, the False option is not supported
 
@@ -135,7 +135,7 @@ class Config(object):
     # The Mask RCNN paper uses lr=0.02, but on TensorFlow it causes
     # weights to explode. Likely due to differences in optimzer
     # implementation.
-    LEARNING_RATE = 0.001
+    LEARNING_RATE = 0.0001
     LEARNING_MOMENTUM = 0.9
 
     # Weight decay regularization

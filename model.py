@@ -55,8 +55,8 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
         length      - Optional  : character length of bar (Int)
         fill        - Optional  : bar fill character (Str)
     """
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total+1e-8)))
+    filledLength = int(length * iteration // (total+1e-8))
     bar = fill * filledLength + '-' * (length - filledLength)
     print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end = '\n')
     # Print New Line on Complete
@@ -565,7 +565,8 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
     # Handle COCO crowds
     # A crowd box in COCO is a bounding box around several instances. Exclude
     # them from training. A crowd box is given a negative class ID.
-    if torch.nonzero(gt_class_ids < 0).size():
+    if torch.nonzero(gt_class_ids < 0).size()[0] > 0:
+
         crowd_ix = torch.nonzero(gt_class_ids < 0)[:, 0]
         non_crowd_ix = torch.nonzero(gt_class_ids > 0)[:, 0]
         crowd_boxes = gt_boxes[crowd_ix.data, :]
@@ -594,7 +595,7 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 
     # Subsample ROIs. Aim for 33% positive
     # Positive ROIs
-    if torch.nonzero(positive_roi_bool).size():
+    if torch.nonzero(positive_roi_bool).size()[0]:
         positive_indices = torch.nonzero(positive_roi_bool)[:, 0]
 
         positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
@@ -653,7 +654,7 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
     negative_roi_bool = roi_iou_max < 0.5
     negative_roi_bool = negative_roi_bool & no_crowd_bool
     # Negative ROIs. Add enough to maintain positive:negative ratio.
-    if torch.nonzero(negative_roi_bool).size() and positive_count>0:
+    if torch.nonzero(negative_roi_bool).size()[0] and positive_count>0:
         negative_indices = torch.nonzero(negative_roi_bool)[:, 0]
         r = 1.0 / config.ROI_POSITIVE_RATIO
         negative_count = int(r * positive_count - positive_count)
@@ -1053,7 +1054,7 @@ def compute_mrcnn_class_loss(target_class_ids, pred_class_logits):
     """
 
     # Loss
-    if target_class_ids.size():
+    if target_class_ids.size()[0]:
         loss = F.cross_entropy(pred_class_logits,target_class_ids.long())
     else:
         loss = Variable(torch.FloatTensor([0]), requires_grad=False)
@@ -1071,7 +1072,7 @@ def compute_mrcnn_bbox_loss(target_bbox, target_class_ids, pred_bbox):
     pred_bbox: [batch, num_rois, num_classes, (dy, dx, log(dh), log(dw))]
     """
 
-    if target_class_ids.size():
+    if target_class_ids.size()[0]:
         # Only positive ROIs contribute to the loss. And only
         # the right class_id of each ROI. Get their indicies.
         positive_roi_ix = torch.nonzero(target_class_ids > 0)[:, 0]
@@ -1101,7 +1102,7 @@ def compute_mrcnn_mask_loss(target_masks, target_class_ids, pred_masks):
     pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
                 with values from 0 to 1.
     """
-    if target_class_ids.size():
+    if target_class_ids.size()[0]:
         # Only positive ROIs contribute to the loss. And only
         # the class specific mask of each ROI.
         positive_ix = torch.nonzero(target_class_ids > 0)[:, 0]
@@ -1127,7 +1128,7 @@ def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_
     rpn_bbox_loss = compute_rpn_bbox_loss(rpn_bbox, rpn_match, rpn_pred_bbox)
     mrcnn_class_loss = compute_mrcnn_class_loss(target_class_ids, mrcnn_class_logits)
     mrcnn_bbox_loss = compute_mrcnn_bbox_loss(target_deltas, target_class_ids, mrcnn_bbox)
-    mrcnn_mask_loss = compute_mrcnn_mask_loss(target_mask, target_class_ids, mrcnn_mask)
+    mrcnn_mask_loss = 2*compute_mrcnn_mask_loss(target_mask, target_class_ids, mrcnn_mask)
 
     return [rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss]
 
@@ -1341,7 +1342,7 @@ class Dataset(torch.utils.data.Dataset):
 
         self.dataset = dataset
         self.config = config
-        self.augment = augment
+        self.augment = False
 
         # Anchors
         # [anchor_count, (y1, x1, y2, x2)]
@@ -1560,6 +1561,9 @@ class MaskRCNN(nn.Module):
         """
         if os.path.exists(filepath):
             state_dict = torch.load(filepath)
+            state_dict = {k: v for k, v in state_dict.items() if 'mask' not in k and 'classifier' not in k and 'rpn' not in k}
+            # for k, v in state_dict.items():
+            #     print(k)
             self.load_state_dict(state_dict, strict=False)
         else:
             print("Weight file not found ...")
@@ -1713,7 +1717,7 @@ class MaskRCNN(nn.Module):
             rois, target_class_ids, target_deltas, target_mask = \
                 detection_target_layer(rpn_rois, gt_class_ids, gt_boxes, gt_masks, self.config)
 
-            if not rois.size():
+            if not rois.size()[0]:
                 mrcnn_class_logits = Variable(torch.FloatTensor())
                 mrcnn_class = Variable(torch.IntTensor())
                 mrcnn_bbox = Variable(torch.FloatTensor())
@@ -1766,9 +1770,9 @@ class MaskRCNN(nn.Module):
             layers = layer_regex[layers]
 
         # Data generators
-        train_set = Dataset(train_dataset, self.config, augment=True)
+        train_set = Dataset(train_dataset, self.config, augment=False)
         train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
-        val_set = Dataset(val_dataset, self.config, augment=True)
+        val_set = Dataset(val_dataset, self.config, augment=False)
         val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=4)
 
         # Train
@@ -1781,10 +1785,15 @@ class MaskRCNN(nn.Module):
         # Skip gamma and beta weights of batch normalization layers.
         trainables_wo_bn = [param for name, param in self.named_parameters() if param.requires_grad and not 'bn' in name]
         trainables_only_bn = [param for name, param in self.named_parameters() if param.requires_grad and 'bn' in name]
-        optimizer = optim.SGD([
-            {'params': trainables_wo_bn, 'weight_decay': self.config.WEIGHT_DECAY},
+        optimizer = optim.Adam([
+            {'params': trainables_wo_bn},
             {'params': trainables_only_bn}
-        ], lr=learning_rate, momentum=self.config.LEARNING_MOMENTUM)
+        ], lr=learning_rate)
+
+        # optimizer = optim.SGD([
+        #             {'params': trainables_wo_bn, 'weight_decay': self.config.WEIGHT_DECAY},
+        #             {'params': trainables_only_bn}
+        # ], lr=learning_rate, momentum=self.config.LEARNING_MOMENTUM)
 
         for epoch in range(self.epoch+1, epochs+1):
             log("Epoch {}/{}.".format(epoch,epochs))
@@ -1931,7 +1940,7 @@ class MaskRCNN(nn.Module):
             rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \
                 self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='training')
 
-            if not target_class_ids.size():
+            if not target_class_ids.size()[0]:
                 continue
 
             # Compute losses
