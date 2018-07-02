@@ -26,6 +26,7 @@ import visualize
 from nms.nms_wrapper import nms
 from roialign.roi_align.crop_and_resize import CropAndResizeFunction
 
+import pdb
 
 ############################################################
 #  Logging Utility Functions
@@ -43,7 +44,7 @@ def log(text, array=None):
             array.max() if array.size else ""))
     print(text)
 
-def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█'):
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '-'):
     """
     Call in a loop to create terminal progress bar
     @params:
@@ -58,7 +59,7 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total+1e-8)))
     filledLength = int(length * iteration // (total+1e-8))
     bar = fill * filledLength + '-' * (length - filledLength)
-    print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end = '\n')
+    print('\r%s |%s| %s%% %s \n' % (prefix, bar, percent, suffix))
     # Print New Line on Complete
     if iteration == total:
         print()
@@ -1797,9 +1798,9 @@ class MaskRCNN(nn.Module):
 
         # Data generators
         train_set = Dataset(train_dataset, self.config, augment=False)
-        train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
+        train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1)
         val_set = Dataset(val_dataset, self.config, augment=False)
-        val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=4)
+        val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=1)
 
         # Train
         log("\nStarting at epoch {}. LR={}\n".format(self.epoch+1, learning_rate))
@@ -1996,7 +1997,6 @@ class MaskRCNN(nn.Module):
         return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
 
 
-
     def mold_inputs(self, images):
         """Takes a list of images and modifies them to the format expected
         as an input to the neural network.
@@ -2095,6 +2095,42 @@ class MaskRCNN(nn.Module):
             if full_masks else np.empty((0,) + masks.shape[1:3])
 
         return boxes, class_ids, scores, full_masks
+
+
+
+
+    def evaluate_map(self, test_dataset, vocabulary):
+        test_set = Dataset(test_dataset, self.config, augment=False)
+        val_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False)
+
+        test_roidb = list()
+        images = list()
+        for data in val_generator:
+            image = data[0]
+            image_metas = data[1]
+            rpn_match = data[2]
+            rpn_bbox = data[3]
+            gt_class_ids = data[4]
+            gt_boxes = data[5]
+            gt_masks = data[6]
+
+            pdb.set_trace()
+
+            roi_info = {
+                'bbox': gt_boxes,
+                'mask': gt_masks,
+                'gt_classes': gt_class_ids
+            }
+
+            images.append(image)
+            test_roidb.append(roi_info)
+
+        detection_results = self.detect(images)
+
+        #todo: get all_boxes_gt from detection results
+
+        utils.detector_eval(all_boxes, test_roidb, vocabulary=vocabulary)
+
 
 
 ############################################################

@@ -13,7 +13,7 @@ import model as modellib
 import visualize
 
 import torch
-
+import pdb
 
 # Root directory of the project
 ROOT_DIR = os.getcwd()
@@ -27,7 +27,8 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.pth")
 
 # Directory of images to run detection on
-IMAGE_DIR = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/rgb'
+DATASET_BASE_DIR = '/local-scratch/cjc/geometry-completion/data/la_dataset'
+IMAGE_DIR = os.path.join(DATASET_BASE_DIR, 'rgb')
 
 class InferenceConfig(coco.BuildingsConfig):
     # Set batch size to 1 since we'll be running inference on
@@ -47,6 +48,7 @@ if config.GPU_COUNT:
 # Load weights trained on MS-COCO
 _, last_saved = model.find_last()
 model.load_state_dict(torch.load(last_saved))
+print('loaded weights from {}'.format(last_saved))
 
 # COCO Class names
 # Index of the class in the list is its ID. For example, to get ID of
@@ -54,9 +56,9 @@ model.load_state_dict(torch.load(last_saved))
 class_names = ['BG', 'edge']
 
 # Load a random image from the images folder
-im_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/valid_list.txt'
+im_path = os.path.join(DATASET_BASE_DIR, 'train_list.txt')
 with open(im_path) as f:
-    im_list = [x.strip()+'.jpg' for x in f.readlines()][1:]
+    im_list = [x.strip()+'.jpg' for x in f.readlines()][:10]
 
 file_names = im_list
 

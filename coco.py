@@ -37,13 +37,7 @@ from PIL import Image, ImageDraw
 # I submitted a pull request https://github.com/cocodataset/cocoapi/pull/50
 # If the PR is merged then use the original repo.
 # Note: Edit PythonAPI/Makefile and replace "python" with "python3".
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from pycocotools import mask as maskUtils
 
-import zipfile
-import urllib.request
-import shutil
 
 from config import Config
 import utils
@@ -61,6 +55,7 @@ COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.pth")
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 
+DATASET_BASE_DIR = '/local-scratch/cjc/geometry-completion/data/la_dataset'
 ############################################################
 #  Configurations
 ############################################################
@@ -86,22 +81,33 @@ class BuildingsConfig(Config):
 ############################################################
 
 class BuildingsDataset(utils.Dataset):
-    def load_buildings(self, dataset_dir):
+    def load_buildings(self, phase):
         # Add classes
+        if phase != 'train' and phase != 'test':
+            raise ValueError('Invalid phase {} for BuildingDataset'.format(phase))
+
         self.add_class("buildings", 1, "edge")
 
         # Add images
-        rgb_prefix = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/rgb'
-        train_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/train_list.txt'
-        with open(train_path) as f:
-            train_list = f.readlines()
+        rgb_prefix = os.path.join(DATASET_BASE_DIR, 'rgb')
+        if phase == 'train':
+            train_path = os.path.join(DATASET_BASE_DIR, 'train_list.txt')
+            with open(train_path) as f:
+                train_list = f.readlines()[:10]
 
-        for k, im_id in enumerate(train_list):
-            im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
-            for i in range(4):
-                self.add_image("buildings", False, image_id=8*k+2*i, path=im_path)
-                self.add_image("buildings", True, image_id=8*k+2*i+1, path=im_path)     
+            for k, im_id in enumerate(train_list):
+                im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
+                for i in range(4):
+                    self.add_image("buildings", False, image_id=8*k+2*i, path=im_path)
+                    self.add_image("buildings", True, image_id=8*k+2*i+1, path=im_path)
+        elif phase == 'test':
+            test_path = os.path.join(DATASET_BASE_DIR, 'test_list.txt')
+            with open(test_path) as f:
+                test_list = f.readlines()
 
+            for i, im_id in enumerate(test_list):
+                im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
+                self.add_image("buildings", False, image_id=i, path=im_path)
 
     def load_mask(self, image_id):
         """Load instance masks for the given image.
@@ -228,7 +234,7 @@ if __name__ == '__main__':
         model = model.cuda()
 
     # Select weights file to load
-    if args.model:
+    if args.command == 'train' and args.model:
         if args.model.lower() == "coco":
             model_path = COCO_MODEL_PATH
         elif args.model.lower() == "last":
@@ -239,12 +245,12 @@ if __name__ == '__main__':
             model_path = config.IMAGENET_MODEL_PATH
         else:
             model_path = args.model
+        # Load weights
+        print("Loading weights for training from {}".format(model_path))
+        model.load_weights(model_path)
     else:
         model_path = ""
 
-    # Load weights
-    print("Loading weights ", model_path)
-    model.load_weights(model_path)
 
     # Train or evaluate
     if args.command == "train":
@@ -273,7 +279,7 @@ if __name__ == '__main__':
         print("Fine tune Resnet stage 4 and up")
         model.train_model(dataset_train, dataset_train,
                     learning_rate=config.LEARNING_RATE,
-                    epochs=120,
+                    epochs=40,
                     layers='4+')
 
         # Training - Stage 3
@@ -281,17 +287,24 @@ if __name__ == '__main__':
         print("Fine tune all layers")
         model.train_model(dataset_train, dataset_train,
                     learning_rate=config.LEARNING_RATE / 10,
-                    epochs=200,
+                    epochs=100,
                     layers='all')
 
-    # elif args.command == "evaluate":
-    #     # Validation dataset
-    #     dataset_val = CocoDataset()
-    #     coco = dataset_val.load_coco(args.dataset, "minival", year=args.year, return_coco=True, auto_download=args.download)
-    #     dataset_val.prepare()
-    #     print("Running COCO evaluation on {} images.".format(args.limit))
-    #     evaluate_coco(model, dataset_val, coco, "bbox", limit=int(args.limit))
-    #     evaluate_coco(model, dataset_val, coco, "segm", limit=int(args.limit))
-    # else:
-    #     print("'{}' is not recognized. "
-    #           "Use 'train' or 'evaluate'".format(args.command))
+    elif args.command == "evaluate":
+        # Load weights trained on MS-COCO
+        _, last_saved = model.find_last()
+        model.load_state_dict(torch.load(last_saved))
+        class_names = ['BG', 'edge']
+
+        # Validation dataset
+        dataset_test = BuildingsDataset()
+        dataset_test.load_buildings('test')
+        dataset_test.prepare()
+
+        model.evaluate_map(test_dataset=dataset_test, vocabulary=class_names)
+
+        print("Running evaluation on {} images.".format(args.limit))
+
+    else:
+        print("'{}' is not recognized. "
+              "Use 'train' or 'evaluate'".format(args.command))

@@ -19,6 +19,7 @@ if "DISPLAY" not in os.environ:
 import matplotlib.patches as patches
 import matplotlib.lines as lines
 from matplotlib.patches import Polygon
+from scipy.misc import imsave
 
 import utils
 
