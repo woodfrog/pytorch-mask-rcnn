@@ -784,6 +784,7 @@ def refine_detections(rois, probs, deltas, window, config):
     # Filter out low confidence boxes
     if config.DETECTION_MIN_CONFIDENCE:
         keep_bool = keep_bool & (class_scores >= config.DETECTION_MIN_CONFIDENCE)
+
     keep = torch.nonzero(keep_bool)[:,0]
 
     # Apply per-class NMS
@@ -1102,7 +1103,19 @@ def compute_mrcnn_mask_loss(target_masks, target_class_ids, pred_masks):
     pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
                 with values from 0 to 1.
     """
+
     if target_class_ids.size()[0]:
+
+        # filter emtpy masks
+        keep = torch.sum(target_masks.view(target_masks.shape[0], -1), dim=-1) > 0
+        target_masks = target_masks[keep]
+        pred_masks = pred_masks[keep]
+        target_class_ids = target_class_ids[keep]
+
+
+    if target_class_ids.size()[0]:
+
+
         # Only positive ROIs contribute to the loss. And only
         # the class specific mask of each ROI.
         positive_ix = torch.nonzero(target_class_ids > 0)[:, 0]
@@ -1128,7 +1141,7 @@ def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_
     rpn_bbox_loss = compute_rpn_bbox_loss(rpn_bbox, rpn_match, rpn_pred_bbox)
     mrcnn_class_loss = compute_mrcnn_class_loss(target_class_ids, mrcnn_class_logits)
     mrcnn_bbox_loss = compute_mrcnn_bbox_loss(target_deltas, target_class_ids, mrcnn_bbox)
-    mrcnn_mask_loss = 2*compute_mrcnn_mask_loss(target_mask, target_class_ids, mrcnn_mask)
+    mrcnn_mask_loss = compute_mrcnn_mask_loss(target_mask, target_class_ids, mrcnn_mask)
 
     return [rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss]
 
@@ -1561,7 +1574,8 @@ class MaskRCNN(nn.Module):
         """
         if os.path.exists(filepath):
             state_dict = torch.load(filepath)
-            state_dict = {k: v for k, v in state_dict.items() if 'mask' not in k and 'classifier' not in k and 'rpn' not in k}
+            #state_dict = {k: v for k, v in state_dict.items() if 'mask' not in k and 'classifier' not in k and 'rpn' not in k}
+            state_dict = {k: v for k, v in state_dict.items() if v.shape[0] != 81 and 'classifier.linear_bbox' not in k}
             # for k, v in state_dict.items():
             #     print(k)
             self.load_state_dict(state_dict, strict=False)
@@ -1604,7 +1618,7 @@ class MaskRCNN(nn.Module):
         # Convert to numpy
         detections = detections.data.cpu().numpy()
         mrcnn_mask = mrcnn_mask.permute(0, 1, 3, 4, 2).data.cpu().numpy()
-
+        
         # Process detections
         results = []
         for i, image in enumerate(images):
@@ -1717,6 +1731,18 @@ class MaskRCNN(nn.Module):
             rois, target_class_ids, target_deltas, target_mask = \
                 detection_target_layer(rpn_rois, gt_class_ids, gt_boxes, gt_masks, self.config)
 
+            # print(torch.sum(target_mask.view(target_mask.shape[0], -1), -1).shape)
+
+            # from PIL import Image, ImageDraw
+            # import matplotlib.pyplot as plt
+            # print(target_mask.shape)
+            # print(rois.shape)
+            # if len(target_mask.shape) > 0:
+            #     for m in target_mask:
+            #         im = Image.fromarray(np.array(m)*255.0).convert('RGB')
+            #         plt.imshow(im)
+            #         plt.show()
+
             if not rois.size()[0]:
                 mrcnn_class_logits = Variable(torch.FloatTensor())
                 mrcnn_class = Variable(torch.IntTensor())
@@ -1786,7 +1812,7 @@ class MaskRCNN(nn.Module):
         trainables_wo_bn = [param for name, param in self.named_parameters() if param.requires_grad and not 'bn' in name]
         trainables_only_bn = [param for name, param in self.named_parameters() if param.requires_grad and 'bn' in name]
         optimizer = optim.Adam([
-            {'params': trainables_wo_bn},
+            {'params': trainables_wo_bn, 'weight_decay': self.config.WEIGHT_DECAY},
             {'params': trainables_only_bn}
         ], lr=learning_rate)
 

@@ -54,18 +54,20 @@ model.load_state_dict(torch.load(last_saved))
 class_names = ['BG', 'edge']
 
 # Load a random image from the images folder
-im_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/train_list.txt'
+im_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/valid_list.txt'
 with open(im_path) as f:
-    im_list = [x.strip()+'.jpg' for x in f.readlines()[:10]]
+    im_list = [x.strip()+'.jpg' for x in f.readlines()][1:]
 
 file_names = im_list
-image = skimage.io.imread(os.path.join(IMAGE_DIR, random.choice(file_names)))
 
-# Run detection
-results = model.detect([image])
+for fname in file_names:
+    image = skimage.io.imread(os.path.join(IMAGE_DIR, fname))
 
-# Visualize results
-r = results[0]
-visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
-                            class_names, r['scores'])
-plt.show()
+    # Run detection
+    results = model.detect([image])
+
+    # Visualize results
+    r = results[0]
+    visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
+                                class_names, r['scores'])
+    plt.show()

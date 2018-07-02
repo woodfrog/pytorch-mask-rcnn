@@ -94,7 +94,7 @@ class BuildingsDataset(utils.Dataset):
         rgb_prefix = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/rgb'
         train_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/train_list.txt'
         with open(train_path) as f:
-            train_list = f.readlines()[:10]
+            train_list = f.readlines()
 
         for k, im_id in enumerate(train_list):
             im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
@@ -141,7 +141,7 @@ class BuildingsDataset(utils.Dataset):
                 
                 # draw lines
                 draw = ImageDraw.Draw(mask_im)
-                draw.line((x1, y1, x2, y2), fill='white', width=2)
+                draw.line((x1, y1, x2, y2), fill='white', width=3)
                 
                 # apply augmentation            
                 mask_im = mask_im.rotate(rot)
@@ -186,7 +186,7 @@ if __name__ == '__main__':
         description='Train Mask R-CNN.')
     parser.add_argument("command",
                         metavar="<command>",
-                        help="'train' or 'evaluate' on MS COCO")
+                        help="'train' or 'evaluate'")
     parser.add_argument('--model', required=False,
                         metavar="/path/to/weights.pth",
                         help="Path to weights .pth file")
@@ -268,20 +268,20 @@ if __name__ == '__main__':
                     epochs=20,
                     layers='heads')
 
-        # # Training - Stage 2
-        # # Finetune layers from ResNet stage 4 and up
-        # print("Fine tune Resnet stage 4 and up")
-        # model.train_model(dataset_train, dataset_train,
-        #             learning_rate=config.LEARNING_RATE,
-        #             epochs=120,
-        #             layers='4+')
+        # Training - Stage 2
+        # Finetune layers from ResNet stage 4 and up
+        print("Fine tune Resnet stage 4 and up")
+        model.train_model(dataset_train, dataset_train,
+                    learning_rate=config.LEARNING_RATE,
+                    epochs=120,
+                    layers='4+')
 
         # Training - Stage 3
         # Fine tune all layers
         print("Fine tune all layers")
         model.train_model(dataset_train, dataset_train,
                     learning_rate=config.LEARNING_RATE / 10,
-                    epochs=100,
+                    epochs=200,
                     layers='all')
 
     # elif args.command == "evaluate":

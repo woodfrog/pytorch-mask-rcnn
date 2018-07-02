@@ -45,7 +45,7 @@ class Config(object):
     # Validation stats are also calculated at each epoch end and they
     # might take a while, so don't set this too small to avoid spending
     # a lot of time on validation stats.
-    STEPS_PER_EPOCH = 500
+    STEPS_PER_EPOCH = 1000
 
     # Number of validation steps to run at the end of every training epoch.
     # A bigger number improves accuracy of validation stats, but slows
@@ -64,7 +64,7 @@ class Config(object):
 
     # Ratios of anchors at each cell (width/height)
     # A value of 1 represents a square anchor, and 0.5 is a wide anchor
-    RPN_ANCHOR_RATIOS = [0.25, 0.5, 1, 2, 4, 8]
+    RPN_ANCHOR_RATIOS = [0.5, 1, 2]
 
     # Anchor stride
     # If 1 then anchors are created for each cell in the backbone feature map.
