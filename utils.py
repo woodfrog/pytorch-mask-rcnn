@@ -54,11 +54,11 @@ def extract_bboxes(mask):
         # max_size = max(y2-y1, x2-x1)
         # yc = (y2+y1)/2.0
         # xc = (x2+x1)/2.0
-        #gap = 2
+        gap = 2
         # n_y1, n_x1 = max(yc-(max_size/2.0)-gap, 0), max(xc-(max_size/2.0)-gap, 0)
         # n_y2, n_x2 = min(yc+(max_size/2.0)+gap, mask.shape[0]-1), min(xc+(max_size/2.0)+gap, mask.shape[0]-1)
-        #boxes[i] = np.array([y1-gap, x1-gap, y2+gap, x2+gap])
-        boxes[i] = np.array([y1, x1, y2, x2])
+        boxes[i] = np.array([y1-gap, x1-gap, y2+gap, x2+gap])
+        #boxes[i] = np.array([y1, x1, y2, x2])
 
         # dr.rectangle(((x1-gap, y1-gap), (x2+gap, y2+gap)), outline="blue")
         # plt.imshow(im)
