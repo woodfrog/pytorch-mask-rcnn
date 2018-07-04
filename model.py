@@ -20,6 +20,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 from torch.autograd import Variable
+from collections import OrderedDict
 
 import utils
 import visualize
@@ -254,7 +255,7 @@ class ResNet(nn.Module):
         self.stage5 = stage5
 
         self.C1 = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3),
+            nn.Conv2d(4, 64, kernel_size=7, stride=2, padding=3),
             nn.BatchNorm2d(64, eps=0.001, momentum=0.01),
             nn.ReLU(inplace=True),
             SamePad2d(kernel_size=3, stride=2),
@@ -1580,19 +1581,30 @@ class MaskRCNN(nn.Module):
         checkpoint = os.path.join(dir_name, checkpoints[-1])
         return dir_name, checkpoint
 
-    def load_weights(self, filepath):
+    def load_weights(self, filepath, extra_channels=1):
         """Modified version of the correspoding Keras function with
         the addition of multi-GPU support and the ability to exclude
         some layers from loading.
         exlude: list of layer names to excluce
         """
         if os.path.exists(filepath):
-            state_dict = torch.load(filepath)
-            # state_dict = {k: v for k, v in state_dict.items() if 'mask' not in k and 'classifier' not in k and 'rpn' not in k}
-            state_dict = {k: v for k, v in state_dict.items() if v.shape[0] != 81 and 'classifier.linear_bbox' not in k}
-            # for k, v in state_dict.items():
-            #     print(k)
-            self.load_state_dict(state_dict, strict=False)
+
+            # load pretrained weights
+            pretrained_dict = torch.load(filepath)
+
+            # modify weights
+            new_weights = OrderedDict()
+            for k, v in pretrained_dict.items():
+                if 'fpn.C1.0.weight' in k:
+                    mean_weight = torch.mean(v, dim=1, keepdim=True)
+                    mean_weight = mean_weight.repeat(1, extra_channels, 1, 1)
+                    new_first_layer_weight = torch.cat([v, mean_weight], dim=1)
+                    new_weights.update({k:new_first_layer_weight})
+
+                elif v.shape[0] != 81 and 'classifier.linear_bbox' not in k:
+                    new_weights.update({k:v})
+            self.load_state_dict(new_weights, strict=False)
+
         else:
             print("Weight file not found ...")
 
@@ -2233,7 +2245,9 @@ def mold_image(images, config):
     the mean pixel and converts it to float. Expects image
     colors in RGB order.
     """
-    return images.astype(np.float32) - config.MEAN_PIXEL
+    images = images.astype(np.float32)
+    images[:, :, :3] = images[:, :, :3] - config.MEAN_PIXEL
+    return images
 
 
 def unmold_image(normalized_images, config):

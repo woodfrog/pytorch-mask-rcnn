@@ -56,7 +56,7 @@ COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.pth")
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 
-DATASET_BASE_DIR = '/media/nelson/Workspace1/Projects/building_reconstructionf/la_dataset'
+DATASET_BASE_DIR = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset'
 IMAGE_DIR = os.path.join(DATASET_BASE_DIR, 'rgb')
 
 ############################################################
@@ -211,12 +211,15 @@ class BuildingsDataset(utils.Dataset):
     def load_image(self, image_id):
         info = self.image_info[image_id]
         im = Image.open(info['path'])
+        dp_im = Image.open(info['path'].replace('rgb', 'depth')).convert('L')
         if self.phase == 'train':
             rot = (image_id % 4)*90
             im = im.rotate(rot)
+            dp_im = dp_im.rotate(rot)
             if info['flip'] == True:
                 im = im.transpose(Image.FLIP_LEFT_RIGHT)
-        return np.array(im)
+                dp_im = dp_im.transpose(Image.FLIP_LEFT_RIGHT)
+        return np.concatenate([np.array(im), np.array(dp_im)[:, :, np.newaxis]], axis=-1)
              
 ############################################################
 #  Training
