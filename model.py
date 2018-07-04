@@ -2130,7 +2130,7 @@ class MaskRCNN(nn.Module):
 
             roi_info = {
                 'boxes': gt_boxes,
-                'mask': gt_masks,
+                'masks': gt_masks,
                 'gt_classes': gt_class_ids
             }
 
@@ -2146,27 +2146,36 @@ class MaskRCNN(nn.Module):
         num_classes = len(vocabulary)
 
         all_boxes = [[[] for _ in range(num_images)] for _ in range(num_classes)]
+        all_masks = [[[] for _ in range(num_images)] for _ in range(num_classes)]
+
         empty_array = np.transpose(np.array([[], [], [], [], []]), (1, 0))
 
+        # prepare and organize the detection results (boxes and corresponding masks)
         for i in range(num_images):
             img_boxes = detection_results[i]['rois']
             img_class_ids = detection_results[i]['class_ids']
             img_scores = detection_results[i]['scores']
+            img_masks = detection_results[i]['masks']
             for j in range(1, num_classes):
                 boxes = list()
                 scores = list()
+                masks = list()
                 for det_i, class_id in enumerate(img_class_ids):
                     if class_id == j:
                         boxes.append(img_boxes[det_i])
                         scores.append(img_scores[det_i])
+                        masks.append(img_masks[:, :, det_i])
                 if len(boxes) > 0:
                     boxes = np.stack(boxes, axis=0)
                     scores = np.stack(scores, axis=0)
+                    masks = np.stack(masks, axis=0)
                     all_boxes[j][i] = np.concatenate([boxes, np.expand_dims(scores, axis=1)], axis=1)
+                    all_masks[j][i] = masks
                 else:
                     all_boxes[j][i] = empty_array
+                    all_masks[j][i] = empty_array
 
-        utils.detector_eval(all_boxes, test_roidb, vocabulary=vocabulary)
+        utils.detector_eval(all_boxes, all_masks, test_roidb, vocabulary=vocabulary)
 
 
 ############################################################

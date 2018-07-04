@@ -11,6 +11,7 @@ import sys
 import os
 import math
 import random
+import cv2
 import numpy as np
 import scipy.misc
 import scipy.ndimage
@@ -515,6 +516,7 @@ def voc_ap(rec, prec, use_07_metric=False):
 
 
 def detector_eval(all_boxes,
+                  all_masks,
                   roidb,
                   vocabulary,
                   ovthresh=0.3,
@@ -533,30 +535,34 @@ def detector_eval(all_boxes,
 
     # ground-truth bboxes for every class in each image
     npos_all = [0 for _ in range(len(vocabulary))]
-    gt_records = [[{'bbox': list(), 'det': list()} for _ in range(len(vocabulary))] for _ in
+    gt_records = [[{'bbox': list(), 'det': list(), 'mask': list()} for _ in range(len(vocabulary))] for _ in
                   range(len(roidb))]
     for image_id, roi_info in enumerate(roidb):
         gt_classes = roi_info['gt_classes'].tolist()
         gt_bboxes = roi_info['boxes'].tolist()
-        assert (len(gt_classes) == len(gt_bboxes))
-        for gt_class, gt_bbox in zip(gt_classes, gt_bboxes):
+        gt_masks = roi_info['masks'].tolist()
+        assert (len(gt_classes) == len(gt_bboxes) == len(gt_masks))
+        for gt_class, gt_bbox, gt_mask in zip(gt_classes, gt_bboxes, gt_masks):
             gt_class = int(gt_class)
             gt_records[image_id][gt_class]['bbox'].append(gt_bbox)
             gt_records[image_id][gt_class]['det'].append(False)
+            gt_records[image_id][gt_class]['mask'].append(gt_mask)
             npos_all[gt_class] = npos_all[gt_class] + 1
 
     # one entry for each class
     image_ids_all = [[] for _ in range(len(vocabulary))]
     confidence_all = [[] for _ in range(len(vocabulary))]
     BB_all = [[] for _ in range(len(vocabulary))]
+    masks_all = [[] for _ in range(len(vocabulary))]
 
     for class_idx in range(len(vocabulary)):
         for image_id in range(len(all_boxes[class_idx])):
             # iterate through each det
-            for det in all_boxes[class_idx][image_id]:
+            for det, mask in zip(all_boxes[class_idx][image_id], all_masks[class_idx][image_id]):
                 image_ids_all[class_idx].append(image_id)
                 confidence_all[class_idx].append(det[4])
                 BB_all[class_idx].append(list(det[:4]))
+                masks_all[class_idx].append(mask)
     aps = list()
 
     # compute map for every selected class
@@ -566,24 +572,29 @@ def detector_eval(all_boxes,
         image_ids = image_ids_all[class_idx]
         confidence = np.array(confidence_all[class_idx])
         BB = np.array(BB_all[class_idx])
+        mask_preds = np.array(masks_all[class_idx])
 
         nd = len(image_ids)
         tp = np.zeros(nd)
         fp = np.zeros(nd)
+        mask_ious = list()
 
         if BB.shape[0] > 0:
             # sort by confidence
             sorted_ind = np.argsort(-confidence)
             sorted_scores = np.sort(-confidence)
             BB = BB[sorted_ind, :]
+            mask_preds = mask_preds[sorted_ind, :]
             image_ids = [image_ids[x] for x in sorted_ind]
 
             # go down dets and mark TPs and FPs
             for d in range(nd):
                 R = gt_records[image_ids[d]]
                 bb = BB[d, :].astype(float)
+                mask_pred = mask_preds[d, :, :].astype(float)
                 ovmax = -np.inf
                 BBGT = np.array(R[class_idx]['bbox']).astype(float)
+                masks_gt = np.array(R[class_idx]['mask']).astype(float)
 
                 if BBGT.size > 0:
                     # compute overlaps
@@ -609,6 +620,9 @@ def detector_eval(all_boxes,
                     if not R[class_idx]['det'][jmax]:
                         tp[d] = 1.
                         R[class_idx]['det'][jmax] = 1
+                        gt_mask = masks_gt[jmax]
+                        mask_iou = compute_mask_iou(gt_mask, mask_pred, bb)
+                        mask_ious.append(mask_iou)
                     else:
                         fp[d] = 1.
                 else:
@@ -623,13 +637,28 @@ def detector_eval(all_boxes,
         prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
         ap = voc_ap(rec, prec, use_07_metric)
 
+        mean_mask_iou = np.array(mask_ious).mean()
+
         print('rec: ', rec)
         print('prec: ', prec)
         print('ap: ', ap)
         print('total positive examples for class id {} is {}, detected {} of them'.format(class_idx, npos, tp[-1]))
+        print('averge iou for all positive detections: {}'.format(mean_mask_iou))
         if not np.isnan(ap):
             aps.append(ap)
 
     aps = np.array(aps)
 
     return aps.mean()
+
+
+def compute_mask_iou(gt_mask, mask_pred, bbox_pred):
+    cropped_pred = mask_pred[int(bbox_pred[0]):int(bbox_pred[2])+1, int(bbox_pred[1]):int(bbox_pred[3])+1].astype(bool)
+    resized_gt = cv2.resize(gt_mask, (int(bbox_pred[3]) - int(bbox_pred[1]) + 1, int(bbox_pred[2]) - int(bbox_pred[0]) + 1))
+    resized_gt = resized_gt.round().astype(bool)
+    inter = (resized_gt & cropped_pred).sum()
+
+    union = (resized_gt | cropped_pred).sum()
+    iou = inter / union
+
+    return iou
