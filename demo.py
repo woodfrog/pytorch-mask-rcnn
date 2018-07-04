@@ -56,10 +56,9 @@ print('loaded weights from {}'.format(last_saved))
 class_names = ['BG', 'edge']
 
 # Load a random image from the images folder
-im_path = os.path.join(DATASET_BASE_DIR, 'valid_list.txt')
+im_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/train_list.txt'
 with open(im_path) as f:
-    im_list = [x.strip()+'.jpg' for x in f.readlines()][0:1]
-
+    im_list = [x.strip()+'.jpg' for x in f.readlines()]
 file_names = im_list
 
 for fname in file_names:
