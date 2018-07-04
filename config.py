@@ -85,7 +85,7 @@ class Config(object):
     # If enabled, resizes instance masks to a smaller size to reduce
     # memory load. Recommended when using high-resolution images.
     USE_MINI_MASK = True
-    MINI_MASK_SHAPE = (56, 56)  # (height, width) of the mini-mask
+    MINI_MASK_SHAPE = (128, 128)  # (height, width) of the mini-mask
 
     # Input image resing
     # Images are resized such that the smallest side is >= IMAGE_MIN_DIM and
@@ -111,8 +111,8 @@ class Config(object):
 
     # Pooled ROIs
     POOL_SIZE = 7
-    MASK_POOL_SIZE = 14
-    MASK_SHAPE = [28, 28]
+    MASK_POOL_SIZE = 16
+    MASK_SHAPE = [32, 32]
 
     # Maximum number of ground truth instances to use in one image
     MAX_GT_INSTANCES = 100

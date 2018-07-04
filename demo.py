@@ -54,7 +54,7 @@ model.load_state_dict(torch.load(last_saved))
 class_names = ['BG', 'edge']
 
 # Load a random image from the images folder
-im_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/train_list.txt'
+im_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/valid_list.txt'
 with open(im_path) as f:
     im_list = [x.strip()+'.jpg' for x in f.readlines()]
 file_names = im_list
