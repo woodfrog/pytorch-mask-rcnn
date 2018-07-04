@@ -27,7 +27,7 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.pth")
 
 # Directory of images to run detection on
-DATASET_BASE_DIR = '/local-scratch/cjc/geometry-completion/data/la_dataset'
+DATASET_BASE_DIR = '/media/nelson/Workspace1/Projects/building_reconstruction/data/la_dataset'
 IMAGE_DIR = os.path.join(DATASET_BASE_DIR, 'rgb')
 
 class InferenceConfig(coco.BuildingsConfig):

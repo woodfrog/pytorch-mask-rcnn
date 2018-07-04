@@ -56,7 +56,7 @@ COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.pth")
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 
-DATASET_BASE_DIR = '/local-scratch/cjc/geometry-completion/data/la_dataset'
+DATASET_BASE_DIR = '/media/nelson/Workspace1/Projects/building_reconstructionf/la_dataset'
 IMAGE_DIR = os.path.join(DATASET_BASE_DIR, 'rgb')
 
 ############################################################
