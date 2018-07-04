@@ -28,22 +28,17 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
 """
 
 import os
-import time
+import pdb
 import numpy as np
 from PIL import Image, ImageDraw
+import skimage.io
 # Download and install the Python COCO tools from https://github.com/waleedka/coco
 # That's a fork from the original https://github.com/pdollar/coco with a bug
 # fix for Python 3.
 # I submitted a pull request https://github.com/cocodataset/cocoapi/pull/50
 # If the PR is merged then use the original repo.
 # Note: Edit PythonAPI/Makefile and replace "python" with "python3".
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from pycocotools import mask as maskUtils
 
-import zipfile
-import urllib.request
-import shutil
 
 from config import Config
 import utils
@@ -60,6 +55,9 @@ COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.pth")
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
+
+DATASET_BASE_DIR = '/media/nelson/Workspace1/Projects/building_reconstructionf/la_dataset'
+IMAGE_DIR = os.path.join(DATASET_BASE_DIR, 'rgb')
 
 ############################################################
 #  Configurations
@@ -81,27 +79,47 @@ class BuildingsConfig(Config):
     NUM_CLASSES = 2
 
 
+class InferenceConfig(BuildingsConfig):
+    # Set batch size to 1 since we'll be running inference on
+    # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
+    # GPU_COUNT = 0 for CPU
+    GPU_COUNT = 1
+    IMAGES_PER_GPU = 1
+
+
 ############################################################
 #  Dataset
 ############################################################
 
 class BuildingsDataset(utils.Dataset):
-    def load_buildings(self, dataset_dir):
+    def load_buildings(self, phase):
+        self.phase = phase
         # Add classes
+        if phase != 'train' and phase != 'test':
+            raise ValueError('Invalid phase {} for BuildingDataset'.format(phase))
+
         self.add_class("buildings", 1, "edge")
 
         # Add images
-        rgb_prefix = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/rgb'
-        train_path = '/media/nelson/Workspace1/Projects/building_reconstruction/la_dataset/train_list.txt'
-        with open(train_path) as f:
-            train_list = f.readlines()
+        rgb_prefix = os.path.join(DATASET_BASE_DIR, 'rgb')
+        if self.phase == 'train':
+            train_path = os.path.join(DATASET_BASE_DIR, 'train_list.txt')
+            with open(train_path) as f:
+                train_list = f.readlines()
 
-        for k, im_id in enumerate(train_list):
-            im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
-            for i in range(4):
-                self.add_image("buildings", False, image_id=8*k+2*i, path=im_path)
-                self.add_image("buildings", True, image_id=8*k+2*i+1, path=im_path)     
+            for k, im_id in enumerate(train_list):
+                im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
+                for i in range(4):
+                    self.add_image("buildings", False, image_id=8*k+2*i, path=im_path)
+                    self.add_image("buildings", True, image_id=8*k+2*i+1, path=im_path)
+        elif self.phase == 'test':
+            test_path = os.path.join(DATASET_BASE_DIR, 'valid_list.txt')
+            with open(test_path) as f:
+                test_list = f.readlines()
 
+            for i, im_id in enumerate(test_list):
+                im_path = os.path.join(rgb_prefix, im_id.strip()+'.jpg')
+                self.add_image("buildings", False, image_id=i, path=im_path)
 
     def load_mask(self, image_id):
         """Load instance masks for the given image.
@@ -118,7 +136,8 @@ class BuildingsDataset(utils.Dataset):
 
         info = self.image_info[image_id]
         im_path = info['path']
-        rot = (image_id % 4)*90
+        if self.phase == 'train':
+            rot = (image_id % 4)*90
         masks = []
         masks_v = []
         class_ids = []
@@ -131,30 +150,55 @@ class BuildingsDataset(utils.Dataset):
         # draw mask
         masks = []
         class_ids = []
+        edge_set = set()
         for v1 in graph:
             for v2 in graph[v1]:
                 x1, y1 = v1
                 x2, y2 = v2
+                # make an order
+                if x1 > x2:
+                    x1, x2, y1, y2 = x2, x1, y2, y1  # swap
+                elif x1 == x2 and y1 > y2:
+                    x1, x2, y1, y2 = x2, x1, y2, y1  # swap
+                else:
+                    pass
+                edge = (x1, y1, x2, y2)
+                edge_set.add(edge)
 
-                # create mask
-                mask_im = Image.fromarray(np.zeros((256, 256)))               
-                
-                # draw lines
-                draw = ImageDraw.Draw(mask_im)
-                draw.line((x1, y1, x2, y2), fill='white', width=3)
-                
-                # apply augmentation            
+        edge_list = list(edge_set)
+        for edge in edge_list:
+            x1, y1, x2, y2 = edge
+            # create mask
+            mask_im = Image.fromarray(np.zeros((256, 256)))
+
+            # draw lines
+            draw = ImageDraw.Draw(mask_im)
+            draw.line((x1, y1, x2, y2), fill='white', width=3)
+
+            # apply augmentation
+            if self.phase == 'train':
                 mask_im = mask_im.rotate(rot)
                 if info['flip']:
-                    mask_im = mask_im.transpose(Image.FLIP_LEFT_RIGHT) 
+                    mask_im = mask_im.transpose(Image.FLIP_LEFT_RIGHT)
 
-                # accumul
-                masks.append(np.array(mask_im))
-                class_ids.append(1)
+            # accumul
+            masks.append(np.array(mask_im))
+            class_ids.append(1)
         masks = np.stack(masks).astype('float').transpose(1, 2, 0)
 
         # Map class names to class IDs.
         class_ids = np.array(class_ids).astype('int32')
+
+
+        # mask_im_all = Image.fromarray(np.zeros((256, 256)))
+        #
+        # for edge in edge_list:
+        #     x1, y1, x2, y2 = edge
+        #     draw = ImageDraw.Draw(mask_im_all)
+        #     draw.line((x1, y1, x2, y2), fill='white', width=3)
+        # import scipy.misc
+        # scipy.misc.imsave('./mask-all.jpg', mask_im_all)
+
         return masks, class_ids
 
     def image_reference(self, image_id):
@@ -166,11 +210,12 @@ class BuildingsDataset(utils.Dataset):
 
     def load_image(self, image_id):
         info = self.image_info[image_id]
-        rot = (image_id % 4)*90 
         im = Image.open(info['path'])
-        im = im.rotate(rot)
-        if info['flip'] == True:
-            im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        if self.phase == 'train':
+            rot = (image_id % 4)*90
+            im = im.rotate(rot)
+            if info['flip'] == True:
+                im = im.transpose(Image.FLIP_LEFT_RIGHT)
         return np.array(im)
              
 ############################################################
@@ -228,7 +273,7 @@ if __name__ == '__main__':
         model = model.cuda()
 
     # Select weights file to load
-    if args.model:
+    if args.command == 'train' and args.model:
         if args.model.lower() == "coco":
             model_path = COCO_MODEL_PATH
         elif args.model.lower() == "last":
@@ -239,12 +284,12 @@ if __name__ == '__main__':
             model_path = config.IMAGENET_MODEL_PATH
         else:
             model_path = args.model
+        # Load weights
+        print("Loading weights for training from {}".format(model_path))
+        model.load_weights(model_path)
     else:
         model_path = ""
 
-    # Load weights
-    print("Loading weights ", model_path)
-    model.load_weights(model_path)
 
     # Train or evaluate
     if args.command == "train":
@@ -284,14 +329,27 @@ if __name__ == '__main__':
                     epochs=100,
                     layers='all')
 
-    # elif args.command == "evaluate":
-    #     # Validation dataset
-    #     dataset_val = CocoDataset()
-    #     coco = dataset_val.load_coco(args.dataset, "minival", year=args.year, return_coco=True, auto_download=args.download)
-    #     dataset_val.prepare()
-    #     print("Running COCO evaluation on {} images.".format(args.limit))
-    #     evaluate_coco(model, dataset_val, coco, "bbox", limit=int(args.limit))
-    #     evaluate_coco(model, dataset_val, coco, "segm", limit=int(args.limit))
-    # else:
-    #     print("'{}' is not recognized. "
-    #           "Use 'train' or 'evaluate'".format(args.command))
+    elif args.command == "evaluate":
+        # Load weights trained on MS-COCO
+        _, last_saved = model.find_last()
+        model.load_state_dict(torch.load(last_saved))
+        class_names = ['BG', 'edge']
+
+        # Validation dataset
+        dataset_test = BuildingsDataset()
+        dataset_test.load_buildings('test')
+        dataset_test.prepare()
+
+        im_path = os.path.join(DATASET_BASE_DIR, 'valid_list.txt')
+        with open(im_path) as f:
+            im_path_list = [x.strip()+'.jpg' for x in f.readlines()]
+
+        im_list = [skimage.io.imread(os.path.join(IMAGE_DIR, path)) for path in im_path_list]
+
+        model.evaluate_map(test_dataset=dataset_test, image_list=im_list, vocabulary=class_names)
+
+        print("Finish evaluation")
+
+    else:
+        print("'{}' is not recognized. "
+              "Use 'train' or 'evaluate'".format(args.command))

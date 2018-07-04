@@ -16,7 +16,7 @@ parser.add_argument('--pytorch_model',
 args = parser.parse_args()
 
 f = h5py.File(args.keras_model, mode='r')
-state_dict = collections.OrderedDict();
+state_dict = collections.OrderedDict()
 for group_name, group in f.items():
     if len(group.items())!=0:
         for layer_name, layer in group.items():
