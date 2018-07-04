@@ -111,8 +111,8 @@ class Config(object):
 
     # Pooled ROIs
     POOL_SIZE = 7
-    MASK_POOL_SIZE = 14
-    MASK_SHAPE = [28, 28]
+    MASK_POOL_SIZE = 16
+    MASK_SHAPE = [32, 32]
 
     # Maximum number of ground truth instances to use in one image
     MAX_GT_INSTANCES = 100
@@ -126,7 +126,7 @@ class Config(object):
 
     # Minimum probability value to accept a detected instance
     # ROIs below this threshold are skipped
-    DETECTION_MIN_CONFIDENCE = 0.7
+    DETECTION_MIN_CONFIDENCE = 0.2
 
     # Non-maximum suppression threshold for detection
     DETECTION_NMS_THRESHOLD = 0.3

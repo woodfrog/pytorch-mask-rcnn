@@ -56,9 +56,9 @@ print('loaded weights from {}'.format(last_saved))
 class_names = ['BG', 'edge']
 
 # Load a random image from the images folder
-im_path = os.path.join(DATASET_BASE_DIR, 'train_list.txt')
+im_path = os.path.join(DATASET_BASE_DIR, 'valid_list.txt')
 with open(im_path) as f:
-    im_list = [x.strip()+'.jpg' for x in f.readlines()][:10]
+    im_list = [x.strip()+'.jpg' for x in f.readlines()][0:1]
 
 file_names = im_list
 
@@ -70,6 +70,7 @@ for fname in file_names:
 
     # Visualize results
     r = results[0]
+    print(len(r['rois']))
     visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
                                 class_names, r['scores'])
     plt.show()

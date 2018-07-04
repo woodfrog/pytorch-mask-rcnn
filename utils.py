@@ -17,6 +17,7 @@ import scipy.ndimage
 import skimage.color
 import skimage.io
 import torch
+import pdb
 
 ############################################################
 #  Bounding Boxes
@@ -516,7 +517,7 @@ def voc_ap(rec, prec, use_07_metric=False):
 def detector_eval(all_boxes,
                   roidb,
                   vocabulary,
-                  ovthresh=0.5,
+                  ovthresh=0.3,
                   use_07_metric=False):
     """rec, prec, ap = voc_eval(detpath,
                                 annopath,
@@ -557,6 +558,7 @@ def detector_eval(all_boxes,
                 confidence_all[class_idx].append(det[4])
                 BB_all[class_idx].append(list(det[:4]))
     aps = list()
+
     # compute map for every selected class
     for class_idx in range(1, len(vocabulary)):
         npos = npos_all[class_idx]
@@ -586,10 +588,11 @@ def detector_eval(all_boxes,
                 if BBGT.size > 0:
                     # compute overlaps
                     # intersection
-                    ixmin = np.maximum(BBGT[:, 0], bb[0])
-                    iymin = np.maximum(BBGT[:, 1], bb[1])
-                    ixmax = np.minimum(BBGT[:, 2], bb[2])
-                    iymax = np.minimum(BBGT[:, 3], bb[3])
+                    # the format is y1, x1, y2, x2
+                    ixmin = np.maximum(BBGT[:, 1], bb[1])
+                    iymin = np.maximum(BBGT[:, 0], bb[0])
+                    ixmax = np.minimum(BBGT[:, 3], bb[3])
+                    iymax = np.minimum(BBGT[:, 2], bb[2])
                     iw = np.maximum(ixmax - ixmin + 1., 0.)
                     ih = np.maximum(iymax - iymin + 1., 0.)
                     inters = iw * ih
@@ -602,7 +605,6 @@ def detector_eval(all_boxes,
                     overlaps = inters / uni
                     ovmax = np.max(overlaps)
                     jmax = np.argmax(overlaps)
-
                 if ovmax > ovthresh:
                     if not R[class_idx]['det'][jmax]:
                         tp[d] = 1.
@@ -624,6 +626,7 @@ def detector_eval(all_boxes,
         print('rec: ', rec)
         print('prec: ', prec)
         print('ap: ', ap)
+        print('total positive examples for class id {} is {}, detected {} of them'.format(class_idx, npos, tp[-1]))
         if not np.isnan(ap):
             aps.append(ap)
 
